@@ -1,0 +1,95 @@
+#include <WiFi.h>
+#include <DHT.h>
+#include <IOXhop_FirebaseESP32.h>
+
+const char* WIFI_SSID = "IOT";
+const char* WIFI_PASSWORD = "iot12345";
+
+#define FIREBASE_HOST "https://services-meteologiques-default-rtdb.firebaseio.com/"
+#define FIREBASE_AUTH "3Zg8ehZjxaGoU1rhE343tvTdgXZhli04KwlaPUrQ"
+
+#define DHT_PIN 14
+#define LIGHT_SENSOR_PIN 35
+#define RAIN_SENSOR_PIN 32
+#define LED_PIN 12
+#define BUZZER_PIN 13
+
+#define DHT_TYPE DHT11
+#define RAIN_THRESHOLD 500
+#define COLD_THRESHOLD 15
+#define HOT_THRESHOLD 30
+
+DHT dht(DHT_PIN, DHT_TYPE);
+
+void setup() {
+  Serial.begin(115200);
+  
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+  Serial.println("Connected to WiFi");
+
+  dht.begin();
+
+  pinMode(LIGHT_SENSOR_PIN, INPUT);
+  pinMode(RAIN_SENSOR_PIN, INPUT);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+}
+
+void loop() {
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+  int lightIntensity = analogRead(LIGHT_SENSOR_PIN);
+  int rainValue = analogRead(RAIN_SENSOR_PIN);
+  
+  bool isDaytime = (lightIntensity > 500);
+  bool isRaining = (rainValue > RAIN_THRESHOLD);
+  bool isCold = (temperature < COLD_THRESHOLD);
+  bool isHot = (temperature > HOT_THRESHOLD);
+
+  digitalWrite(LED_PIN, isDaytime ? HIGH : LOW);
+
+  if (isRaining) {
+    for (int i = 0; i < 3; i++) {
+      digitalWrite(BUZZER_PIN, HIGH);
+      delay(500);
+      digitalWrite(BUZZER_PIN, LOW);
+      delay(500);
+    }
+  } else if (isCold) {
+    digitalWrite(BUZZER_PIN, HIGH);
+    delay(1000);
+    digitalWrite(BUZZER_PIN, LOW);
+    delay(500);
+  } else if (isHot) {
+    for (int i = 0; i < 2; i++) {
+      digitalWrite(BUZZER_PIN, HIGH);
+      delay(500);
+      digitalWrite(BUZZER_PIN, LOW);
+      delay(500);
+    }
+  } else {
+    digitalWrite(BUZZER_PIN, LOW);
+  }
+
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.print("°C, Humidity: ");
+  Serial.print(humidity);
+  Serial.print("%, Light Intensity: ");
+  Serial.print(lightIntensity);
+  Serial.print(", Rain Value: ");
+  Serial.println(rainValue);
+
+  Firebase.setFloat("oussama/temperature", temperature);
+  Firebase.setFloat("oussama/humidity", humidity);
+  Firebase.setInt("oussama/light_intensity", lightIntensity);
+  Firebase.setInt("oussama/rain_value", rainValue);
+
+  delay(2000);
+}
